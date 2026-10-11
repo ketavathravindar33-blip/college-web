@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import {
   AnnouncementItem,
@@ -37,7 +38,7 @@ import {
   INITIAL_SUBJECT_ATTENDANCE,
   INITIAL_VIDEOS,
 } from './data/mockCampusData';
-import { NavigationShell } from './components/NavigationShell';
+import { ALL_48_SCREENS, NavigationShell } from './components/NavigationShell';
 import { PublicAndAuthScreens } from './components/PublicAndAuthScreens';
 import { StudentAndAttendanceScreens } from './components/StudentAndAttendanceScreens';
 import { AcademicsAndResearchScreens } from './components/AcademicsAndResearchScreens';
@@ -45,11 +46,25 @@ import { LmsAndExamsScreens } from './components/LmsAndExamsScreens';
 import { InfrastructureAndEventsScreens } from './components/InfrastructureAndEventsScreens';
 import { AdminAndManagementScreens } from './components/AdminAndManagementScreens';
 
+const VALID_SCREEN_IDS = new Set<string>(ALL_48_SCREENS.map((s) => s.id));
+
 export default function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [collegeConfig, setCollegeConfig] = useState<CollegeConfig>(INITIAL_COLLEGE_CONFIG);
-  const [activeScreen, setActiveScreen] = useState<ScreenId>('public-home');
   const [userRole, setUserRole] = useState<UserRole>('guest');
   const [configModalOpen, setConfigModalOpen] = useState(false);
+
+  // Derive activeScreen from HashRouter location pathname (e.g. "#/student-dashboard" -> "student-dashboard")
+  const rawPath = location.pathname.replace(/^\/+/, '');
+  const activeScreen: ScreenId = VALID_SCREEN_IDS.has(rawPath)
+    ? (rawPath as ScreenId)
+    : 'public-home';
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeScreen]);
 
   // Editable placeholders modal state
   const [modalCollegeName, setModalCollegeName] = useState(collegeConfig.collegeName);
@@ -94,8 +109,7 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(INITIAL_AUDIT_LOGS);
 
   const handleNavigate = (screen: ScreenId) => {
-    setActiveScreen(screen);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigate(`/${screen}`);
   };
 
   const appendAudit = (action: string, module: string) => {
@@ -169,6 +183,218 @@ export default function App() {
     'announcement-details',
     'contact-feedback',
   ];
+
+  const renderScreenById = (screenId: ScreenId) => {
+    if (publicAndAuthIds.includes(screenId)) {
+      return (
+        <PublicAndAuthScreens
+          screen={screenId}
+          collegeConfig={collegeConfig}
+          departments={departments}
+          facilities={facilities}
+          announcements={announcements}
+          onNavigate={handleNavigate}
+          onSelectDepartment={setSelectedDepartment}
+          onSelectFacility={setSelectedFacility}
+          onSelectAnnouncement={setSelectedAnnouncement}
+          onLoginSuccess={(role) => {
+            setUserRole(role);
+            appendAudit(`Authenticated session started as ${role}`, 'Authentication');
+            if (role === 'student') handleNavigate('student-dashboard');
+            else if (role === 'faculty') handleNavigate('faculty-dashboard');
+            else if (role === 'principal') handleNavigate('principal-dashboard');
+            else handleNavigate('admin-dashboard');
+          }}
+          onRegisterStudent={(stu) => {
+            setStudents((prev) => [stu, ...prev]);
+            appendAudit(`New student registration submitted: ${stu.name} (${stu.rollNumber})`, 'Admissions');
+          }}
+          onRegisterFaculty={(fac) => {
+            setFacultyList((prev) => [fac, ...prev]);
+            appendAudit(`New faculty onboarding submitted: ${fac.name}`, 'HR & Faculty');
+          }}
+        />
+      );
+    }
+
+    if (studentAndAttendanceIds.includes(screenId)) {
+      return (
+        <StudentAndAttendanceScreens
+          screen={screenId}
+          collegeConfig={collegeConfig}
+          currentStudent={students[0]}
+          students={students}
+          subjectAttendance={subjectAttendance}
+          dailyAttendance={dailyAttendance}
+          correctionRequests={correctionRequests}
+          studyMaterials={studyMaterials}
+          videos={videos}
+          announcements={announcements}
+          onNavigate={handleNavigate}
+          onSelectMaterial={setSelectedMaterial}
+          onSelectVideo={setSelectedVideo}
+          onSelectAnnouncement={setSelectedAnnouncement}
+          onSubmitCorrection={(req) => {
+            setCorrectionRequests((prev) => [req, ...prev]);
+            appendAudit(`Attendance OD correction petition filed for ${req.subjectName}`, 'Attendance');
+          }}
+          onResolveCorrection={(id, status) => {
+            setCorrectionRequests((prev) =>
+              prev.map((c) => (c.id === id ? { ...c, status } : c))
+            );
+            appendAudit(`Attendance correction ${id} marked ${status}`, 'Attendance');
+          }}
+          onUpdateThreshold={(newMin) =>
+            setCollegeConfig((prev) => ({ ...prev, minAttendanceThreshold: newMin }))
+          }
+        />
+      );
+    }
+
+    if (academicsAndResearchIds.includes(screenId)) {
+      return (
+        <AcademicsAndResearchScreens
+          screen={screenId}
+          collegeConfig={collegeConfig}
+          facultyList={facultyList}
+          selectedFaculty={selectedFaculty}
+          departments={departments}
+          selectedDepartment={selectedDepartment}
+          researchProjects={researchProjects}
+          selectedProject={selectedProject}
+          studyMaterials={studyMaterials}
+          announcements={announcements}
+          onNavigate={handleNavigate}
+          onSelectFaculty={setSelectedFaculty}
+          onSelectDepartment={setSelectedDepartment}
+          onSelectProject={setSelectedProject}
+          onSelectMaterial={setSelectedMaterial}
+          onAddResearchProject={(proj) => {
+            setResearchProjects((prev) => [proj, ...prev]);
+            appendAudit(`Submitted new research grant proposal: ${proj.title}`, 'Research');
+          }}
+        />
+      );
+    }
+
+    if (lmsAndExamsIds.includes(screenId)) {
+      return (
+        <LmsAndExamsScreens
+          screen={screenId}
+          collegeConfig={collegeConfig}
+          currentStudent={students[0]}
+          studyMaterials={studyMaterials}
+          selectedMaterial={selectedMaterial}
+          videos={videos}
+          selectedVideo={selectedVideo}
+          onNavigate={handleNavigate}
+          onSelectMaterial={setSelectedMaterial}
+          onToggleBookmarkMaterial={(id) =>
+            setStudyMaterials((prev) =>
+              prev.map((m) => (m.id === id ? { ...m, bookmarked: !m.bookmarked } : m))
+            )
+          }
+          onUploadMaterial={(mat) => {
+            setStudyMaterials((prev) => [mat, ...prev]);
+            appendAudit(`Uploaded study material: ${mat.title}`, 'LMS Notes');
+          }}
+          onDeleteMaterial={(id) => {
+            setStudyMaterials((prev) => prev.filter((m) => m.id !== id));
+            appendAudit(`Removed study material ${id}`, 'LMS Notes');
+          }}
+          onSelectVideo={setSelectedVideo}
+          onToggleBookmarkVideo={(id) =>
+            setVideos((prev) =>
+              prev.map((v) => (v.id === id ? { ...v, bookmarked: !v.bookmarked } : v))
+            )
+          }
+          onAddVideo={(vid) => {
+            setVideos((prev) => [vid, ...prev]);
+            appendAudit(`Published video lecture: ${vid.title}`, 'Video Portal');
+          }}
+          onDeleteVideo={(id) => {
+            setVideos((prev) => prev.filter((v) => v.id !== id));
+            appendAudit(`Deleted video lecture ${id}`, 'Video Portal');
+          }}
+        />
+      );
+    }
+
+    if (infrastructureAndEventsIds.includes(screenId)) {
+      return (
+        <InfrastructureAndEventsScreens
+          screen={screenId}
+          collegeConfig={collegeConfig}
+          facilities={facilities}
+          selectedFacility={selectedFacility}
+          announcements={announcements}
+          selectedAnnouncement={selectedAnnouncement}
+          departments={departments}
+          onNavigate={handleNavigate}
+          onSelectFacility={setSelectedFacility}
+          onSelectAnnouncement={setSelectedAnnouncement}
+          onPublishAnnouncement={(ann) => {
+            setAnnouncements((prev) => [ann, ...prev]);
+            appendAudit(`Published campus circular: ${ann.title}`, 'Announcements');
+          }}
+          onSubmitFeedback={(fb) => {
+            setFeedbackList((prev) => [fb, ...prev]);
+            appendAudit(`Feedback submitted by ${fb.name} (${fb.category})`, 'Feedback');
+          }}
+        />
+      );
+    }
+
+    return (
+      <AdminAndManagementScreens
+        screen={screenId}
+        collegeConfig={collegeConfig}
+        userRole={userRole}
+        students={students}
+        facultyList={facultyList}
+        departments={departments}
+        studyMaterials={studyMaterials}
+        videos={videos}
+        announcements={announcements}
+        facilities={facilities}
+        correctionRequests={correctionRequests}
+        feedbackList={feedbackList}
+        auditLogs={auditLogs}
+        onNavigate={handleNavigate}
+        onUpdateCollegeConfig={(cfg) => {
+          setCollegeConfig(cfg);
+          appendAudit('Updated institutional placeholders & attendance threshold', 'Settings');
+        }}
+        onApproveStudent={(id) => {
+          setStudents((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, status: 'Active' } : s))
+          );
+          appendAudit(`Approved pending student enrollment ${id}`, 'Administration');
+        }}
+        onDeleteStudent={(id) => {
+          setStudents((prev) => prev.filter((s) => s.id !== id));
+          appendAudit(`Removed student record ${id}`, 'Administration');
+        }}
+        onDeleteFaculty={(id) => {
+          setFacultyList((prev) => prev.filter((f) => f.id !== id));
+          appendAudit(`Removed faculty record ${id}`, 'Administration');
+        }}
+        onDeleteMaterial={(id) =>
+          setStudyMaterials((prev) => prev.filter((m) => m.id !== id))
+        }
+        onDeleteVideo={(id) => setVideos((prev) => prev.filter((v) => v.id !== id))}
+        onResolveFeedback={(id) =>
+          setFeedbackList((prev) =>
+            prev.map((f) => (f.id === id ? { ...f, status: 'Resolved' } : f))
+          )
+        }
+        onLogout={() => {
+          setUserRole('guest');
+          handleNavigate('public-home');
+        }}
+      />
+    );
+  };
 
   return (
     <NavigationShell
@@ -288,210 +514,18 @@ export default function App() {
         </div>
       )}
 
-      {/* ROUTE TO MATCHING SCREEN MODULE (SCREENS 1–48) */}
-      {publicAndAuthIds.includes(activeScreen) && (
-        <PublicAndAuthScreens
-          screen={activeScreen}
-          collegeConfig={collegeConfig}
-          departments={departments}
-          facilities={facilities}
-          announcements={announcements}
-          onNavigate={handleNavigate}
-          onSelectDepartment={setSelectedDepartment}
-          onSelectFacility={setSelectedFacility}
-          onSelectAnnouncement={setSelectedAnnouncement}
-          onLoginSuccess={(role) => {
-            setUserRole(role);
-            appendAudit(`Authenticated session started as ${role}`, 'Authentication');
-            if (role === 'student') handleNavigate('student-dashboard');
-            else if (role === 'faculty') handleNavigate('faculty-dashboard');
-            else if (role === 'principal') handleNavigate('principal-dashboard');
-            else handleNavigate('admin-dashboard');
-          }}
-          onRegisterStudent={(stu) => {
-            setStudents((prev) => [stu, ...prev]);
-            appendAudit(`New student registration submitted: ${stu.name} (${stu.rollNumber})`, 'Admissions');
-          }}
-          onRegisterFaculty={(fac) => {
-            setFacultyList((prev) => [fac, ...prev]);
-            appendAudit(`New faculty onboarding submitted: ${fac.name}`, 'HR & Faculty');
-          }}
-        />
-      )}
-
-      {studentAndAttendanceIds.includes(activeScreen) && (
-        <StudentAndAttendanceScreens
-          screen={activeScreen}
-          collegeConfig={collegeConfig}
-          currentStudent={students[0]}
-          students={students}
-          subjectAttendance={subjectAttendance}
-          dailyAttendance={dailyAttendance}
-          correctionRequests={correctionRequests}
-          studyMaterials={studyMaterials}
-          videos={videos}
-          announcements={announcements}
-          onNavigate={handleNavigate}
-          onSelectMaterial={setSelectedMaterial}
-          onSelectVideo={setSelectedVideo}
-          onSelectAnnouncement={setSelectedAnnouncement}
-          onSubmitCorrection={(req) => {
-            setCorrectionRequests((prev) => [req, ...prev]);
-            appendAudit(`Attendance OD correction petition filed for ${req.subjectName}`, 'Attendance');
-          }}
-          onResolveCorrection={(id, status) => {
-            setCorrectionRequests((prev) =>
-              prev.map((c) => (c.id === id ? { ...c, status } : c))
-            );
-            appendAudit(`Attendance correction ${id} marked ${status}`, 'Attendance');
-          }}
-          onUpdateThreshold={(newMin) =>
-            setCollegeConfig((prev) => ({ ...prev, minAttendanceThreshold: newMin }))
-          }
-        />
-      )}
-
-      {academicsAndResearchIds.includes(activeScreen) && (
-        <AcademicsAndResearchScreens
-          screen={activeScreen}
-          collegeConfig={collegeConfig}
-          facultyList={facultyList}
-          selectedFaculty={selectedFaculty}
-          departments={departments}
-          selectedDepartment={selectedDepartment}
-          researchProjects={researchProjects}
-          selectedProject={selectedProject}
-          studyMaterials={studyMaterials}
-          announcements={announcements}
-          onNavigate={handleNavigate}
-          onSelectFaculty={setSelectedFaculty}
-          onSelectDepartment={setSelectedDepartment}
-          onSelectProject={setSelectedProject}
-          onSelectMaterial={setSelectedMaterial}
-          onAddResearchProject={(proj) => {
-            setResearchProjects((prev) => [proj, ...prev]);
-            appendAudit(`Submitted new research grant proposal: ${proj.title}`, 'Research');
-          }}
-        />
-      )}
-
-      {lmsAndExamsIds.includes(activeScreen) && (
-        <LmsAndExamsScreens
-          screen={activeScreen}
-          collegeConfig={collegeConfig}
-          currentStudent={students[0]}
-          studyMaterials={studyMaterials}
-          selectedMaterial={selectedMaterial}
-          videos={videos}
-          selectedVideo={selectedVideo}
-          onNavigate={handleNavigate}
-          onSelectMaterial={setSelectedMaterial}
-          onToggleBookmarkMaterial={(id) =>
-            setStudyMaterials((prev) =>
-              prev.map((m) => (m.id === id ? { ...m, bookmarked: !m.bookmarked } : m))
-            )
-          }
-          onUploadMaterial={(mat) => {
-            setStudyMaterials((prev) => [mat, ...prev]);
-            appendAudit(`Uploaded study material: ${mat.title}`, 'LMS Notes');
-          }}
-          onDeleteMaterial={(id) => {
-            setStudyMaterials((prev) => prev.filter((m) => m.id !== id));
-            appendAudit(`Removed study material ${id}`, 'LMS Notes');
-          }}
-          onSelectVideo={setSelectedVideo}
-          onToggleBookmarkVideo={(id) =>
-            setVideos((prev) =>
-              prev.map((v) => (v.id === id ? { ...v, bookmarked: !v.bookmarked } : v))
-            )
-          }
-          onAddVideo={(vid) => {
-            setVideos((prev) => [vid, ...prev]);
-            appendAudit(`Published video lecture: ${vid.title}`, 'Video Portal');
-          }}
-          onDeleteVideo={(id) => {
-            setVideos((prev) => prev.filter((v) => v.id !== id));
-            appendAudit(`Deleted video lecture ${id}`, 'Video Portal');
-          }}
-        />
-      )}
-
-      {infrastructureAndEventsIds.includes(activeScreen) && (
-        <InfrastructureAndEventsScreens
-          screen={activeScreen}
-          collegeConfig={collegeConfig}
-          facilities={facilities}
-          selectedFacility={selectedFacility}
-          announcements={announcements}
-          selectedAnnouncement={selectedAnnouncement}
-          departments={departments}
-          onNavigate={handleNavigate}
-          onSelectFacility={setSelectedFacility}
-          onSelectAnnouncement={setSelectedAnnouncement}
-          onPublishAnnouncement={(ann) => {
-            setAnnouncements((prev) => [ann, ...prev]);
-            appendAudit(`Published campus circular: ${ann.title}`, 'Announcements');
-          }}
-          onSubmitFeedback={(fb) => {
-            setFeedbackList((prev) => [fb, ...prev]);
-            appendAudit(`Feedback submitted by ${fb.name} (${fb.category})`, 'Feedback');
-          }}
-        />
-      )}
-
-      {!publicAndAuthIds.includes(activeScreen) &&
-        !studentAndAttendanceIds.includes(activeScreen) &&
-        !academicsAndResearchIds.includes(activeScreen) &&
-        !lmsAndExamsIds.includes(activeScreen) &&
-        !infrastructureAndEventsIds.includes(activeScreen) && (
-          <AdminAndManagementScreens
-            screen={activeScreen}
-            collegeConfig={collegeConfig}
-            userRole={userRole}
-            students={students}
-            facultyList={facultyList}
-            departments={departments}
-            studyMaterials={studyMaterials}
-            videos={videos}
-            announcements={announcements}
-            facilities={facilities}
-            correctionRequests={correctionRequests}
-            feedbackList={feedbackList}
-            auditLogs={auditLogs}
-            onNavigate={handleNavigate}
-            onUpdateCollegeConfig={(cfg) => {
-              setCollegeConfig(cfg);
-              appendAudit('Updated institutional placeholders & attendance threshold', 'Settings');
-            }}
-            onApproveStudent={(id) => {
-              setStudents((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, status: 'Active' } : s))
-              );
-              appendAudit(`Approved pending student enrollment ${id}`, 'Administration');
-            }}
-            onDeleteStudent={(id) => {
-              setStudents((prev) => prev.filter((s) => s.id !== id));
-              appendAudit(`Removed student record ${id}`, 'Administration');
-            }}
-            onDeleteFaculty={(id) => {
-              setFacultyList((prev) => prev.filter((f) => f.id !== id));
-              appendAudit(`Removed faculty record ${id}`, 'Administration');
-            }}
-            onDeleteMaterial={(id) =>
-              setStudyMaterials((prev) => prev.filter((m) => m.id !== id))
-            }
-            onDeleteVideo={(id) => setVideos((prev) => prev.filter((v) => v.id !== id))}
-            onResolveFeedback={(id) =>
-              setFeedbackList((prev) =>
-                prev.map((f) => (f.id === id ? { ...f, status: 'Resolved' } : f))
-              )
-            }
-            onLogout={() => {
-              setUserRole('guest');
-              handleNavigate('public-home');
-            }}
+      {/* HASHROUTER ROUTES ACROSS ALL 48 SCREENS */}
+      <Routes>
+        <Route path="/" element={renderScreenById('public-home')} />
+        {ALL_48_SCREENS.map((scr) => (
+          <Route
+            key={scr.id}
+            path={`/${scr.id}`}
+            element={renderScreenById(scr.id)}
           />
-        )}
+        ))}
+        <Route path="*" element={<Navigate to="/public-home" replace />} />
+      </Routes>
     </NavigationShell>
   );
 }
