@@ -1,0 +1,6 @@
+{
+  "name": "Smart Campus – College Management and Learning Portal",
+  "description": "Complete university website and institutional learning management portal for engineering colleges with student, faculty, principal, and administrator workspaces.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
